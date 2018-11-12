@@ -115,12 +115,92 @@ class HillClimberAgent(Agent):
 class GeneticAgent(Agent):
     # Initialization Function: Called one time when the game starts
     def registerInitialState(self, state):
+        #creating and initializing a list of 5 actions
+        self.actionList = [];
+        self.populationSize = 8;
+        self.actionCount = 5;
+        for actionCount in range(0,5):
+            self.actionList.append(Directions.STOP);
         return;
 
     # GetAction Function: Called with every frame
     def getAction(self, state):
         # TODO: write Genetic Algorithm instead of returning Directions.STOP
-        return Directions.STOP
+        population = [];
+        bestAction = {
+            "rootAction": '',
+            "evaluation": -99999
+        }
+        possibleActions = state.getAllPossibleActions();
+
+        # generating initial population
+        for populationCount in range(0, self.populationSize):
+            actionList = []
+            for actionCount in range(0, self.actionCount):
+                actionList.append(possibleActions[random.randint(0, len(possibleActions) - 1)])
+            population.append(actionList[:])
+        while True:
+            evaluatedPopulation = []
+            for populationIndex in range(0, self.populationSize):
+                tempState = state
+                currentActionSeq = population[populationIndex]
+
+                for actionIndex in range(0, self.actionCount):
+                    if tempState.isWin():
+                        return currentActionSeq[0]
+                    elif tempState.isLose():
+                        break;
+                    else:
+                        nextState = tempState.generatePacmanSuccessor(currentActionSeq[actionIndex])
+                        if nextState is None:
+                            return bestAction["rootAction"]
+                        else:
+                            tempState = nextState
+                evaluatedPopulation.append({
+                    "actionSeq": currentActionSeq[:],
+                    "evaluation": gameEvaluation(state, tempState)
+                })
+            rankedPopulation = sorted(evaluatedPopulation, key=lambda sequence: sequence["evaluation"])
+            bestRankedSeq = rankedPopulation[len(rankedPopulation)-1]
+            if bestRankedSeq["evaluation"] >= bestAction["evaluation"]:
+                bestAction["rootAction"] = bestRankedSeq["actionSeq"][0]
+                bestAction["evaluation"] = bestRankedSeq["evaluation"]
+            nextGeneration = []
+            for pairCount in range(0, self.populationSize/2):
+                candidate1 = rankedPopulation[self.selectRank()]
+                candidate2 = rankedPopulation[self.selectRank()]
+                # 70% test for crossover
+                if random.randint(1,10) <= 7:
+                    for childCount in range(0, 2):
+                        child = []
+                        for actionCount in range(0, self.actionCount):
+                            if random.randint(0, 1) == 0:
+                                child.append(candidate1['actionSeq'][actionCount])
+                            else:
+                                child.append(candidate2['actionSeq'][actionCount])
+                        nextGeneration.append(child[:])
+                else:
+                    nextGeneration.append(candidate1['actionSeq'])
+                    nextGeneration.append(candidate2['actionSeq'])
+            for populationCount in range(0, self.populationSize):
+                if random.randint(1, 10) <= 1:
+                    nextGeneration[populationCount][random.randint(0, self.actionCount-1)] = possibleActions[random.randint(0, len(possibleActions)-1)]
+            population = nextGeneration
+
+    def selectRank(self):
+        # sum of ranks is is essentially sum of consecutive numbers
+        highestRank = self.populationSize
+        sumOfRanks = highestRank * (highestRank+1) / 2
+        randomInteger = random.randint(1, sumOfRanks)
+        selectedRank = runnerRank = highestRank;
+        while runnerRank <= sumOfRanks:
+            if randomInteger <= runnerRank:
+                return selectedRank-1
+            else:
+                selectedRank -= 1
+                runnerRank += selectedRank
+
+
 
 class MCTSAgent(Agent):
     # Initialization Function: Called one time when the game starts
