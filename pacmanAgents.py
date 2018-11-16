@@ -183,7 +183,7 @@ class GeneticAgent(Agent):
                     nextGeneration.append(candidate1['actionSeq'])
                     nextGeneration.append(candidate2['actionSeq'])
             for populationCount in range(0, self.populationSize):
-                if random.randint(1, 10) <= 1:
+                if random.randint(1, 10) == 1:
                     nextGeneration[populationCount][random.randint(0, self.actionCount-1)] = possibleActions[random.randint(0, len(possibleActions)-1)]
             population = nextGeneration
 
@@ -210,4 +210,76 @@ class MCTSAgent(Agent):
     # GetAction Function: Called with every frame
     def getAction(self, state):
         # TODO: write MCTS Algorithm instead of returning Directions.STOP
-        return Directions.STOP
+        rootNode = MCTSNode(state, None, None)
+        self.noneReached = False
+        self.rootState = state
+        while not self.noneReached:
+            newNode = self.applyTreePolicy(rootNode)
+            if newNode is not None:
+                rolloutEvaluation = self.applyDefaultPolicy(newNode)
+                self.doBackPropogation(newNode, rolloutEvaluation)
+
+        maxNumberOfVisits = max([node.numberOfVisits for node in rootNode.childNodes])
+        bestNodes = [node for node in rootNode.childNodes if node.numberOfVisits == maxNumberOfVisits]
+        return random.choice(bestNodes).action
+
+    def doBackPropogation(self, node, rolloutEvaluation):
+        while node is not None:
+            node.numberOfVisits += 1
+            node.evaluation += rolloutEvaluation
+            node = node.parent
+
+    def applyDefaultPolicy(self, node):
+        state = node.state
+        for rolloutCount in range(0,5):
+            if not state.isWin() and not state.isLose() and state is not None:
+                nextState = state.generatePacmanSuccessor(random.choice(state.getLegalPacmanActions()))
+                if nextState is None:
+                    self.noneReached = True
+                    break
+                else:
+                    state = nextState
+        return gameEvaluation(self.rootState, state)
+
+    def selectNextNodeByUCT(self, node):
+        bestUCT = -99999
+        bestNodes = []
+        for childNode in node.childNodes:
+            childNodeUCT = (childNode.evaluation/childNode.numberOfVisits) + math.sqrt((2*math.log(node.numberOfVisits))/childNode.numberOfVisits)
+            if childNodeUCT == bestUCT:
+                bestNodes.append(childNode)
+            elif childNodeUCT > bestUCT:
+                bestNodes = [childNode]
+                bestUCT = childNodeUCT
+        return random.choice(bestNodes)
+
+    def expandTree(self, node):
+        nextAction = node.legalActions.pop(random.randint(0, len(node.legalActions)-1))
+        nextState = node.state.generatePacmanSuccessor(nextAction)
+        if nextState is None:
+            self.noneReached = True
+            return None
+        nextNode = MCTSNode(nextState, node, nextAction)
+        node.childNodes.append(nextNode)
+        if len(node.legalActions) == 0:
+            node.isExploredCompletely = True
+        return nextNode
+
+    def applyTreePolicy(self, node):
+        while node is not None and not node.state.isWin() and not node.state.isLose():
+            if node.isExploredCompletely:
+                node = self.selectNextNodeByUCT(node)
+            else:
+                return self.expandTree(node)
+
+
+class MCTSNode:
+    def __init__(self, state, parent, action):
+        self.state = state
+        self.legalActions = state.getLegalPacmanActions()
+        self.numberOfVisits = 0
+        self.evaluation = 0.0
+        self.isExploredCompletely = False
+        self.parent = parent
+        self.action = action
+        self.childNodes = []
